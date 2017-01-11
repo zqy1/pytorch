@@ -7,7 +7,7 @@ except ImportError:
     pass
 
 
-def RNNReLUCell(input, hidden, w_ih, w_hh, b_ih=None, b_hh=None):
+def RNNReLUCell(step_input, hidden, w_ih, w_hh, b_ih=None, b_hh=None):
         hy = F.relu(F.linear(input, w_ih, b_ih) + F.linear(hidden, w_hh, b_hh))
         return hy
 
@@ -17,9 +17,9 @@ def RNNTanhCell(input, hidden, w_ih, w_hh, b_ih=None, b_hh=None):
         return hy
 
 
-def LSTMCell(input, hidden, w_ih, w_hh, b_ih=None, b_hh=None):
+def LSTMCell(step_input, hidden, w_ih, w_hh, b_ih=None, b_hh=None):
         hx, cx = hidden
-        gates = F.linear(input, w_ih, b_ih) + F.linear(hx, w_hh, b_hh)
+        gates = step_input + F.linear(hx, w_hh, b_hh)
         ingate, forgetgate, cellgate, outgate = gates.chunk(4, 1)
 
         ingate = F.sigmoid(ingate)
@@ -91,8 +91,13 @@ def Recurrent(inner, reverse=False):
     def forward(input, hidden, weight):
         output = []
         steps = range(input.size(0) - 1, -1, -1) if reverse else range(input.size(0))
-        for i in steps:
-            hidden = inner(input[i], hidden, *weight)
+        w_ih = weight[1].t()
+        input_af = torch.bmm(input, w_ih.unsqueeze(0).expand(input.size(0), *w_ih.size()))
+        # TODO: bias
+        # input_af = input_af + weight[3].unsqueeze(0).expand_as(input)
+        for step_input in input_af.chunk(input_af.size(0)):
+            step_input = step_input.squeeze(0)
+            hidden = inner(step_input, hidden, *weight)
             # hack to handle LSTM
             output.append(isinstance(hidden, tuple) and hidden[0] or hidden)
 
