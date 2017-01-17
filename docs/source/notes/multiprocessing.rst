@@ -34,8 +34,8 @@ by the CUDA runtime.
     apply to shared CPU memory.
 
 
-Best practices
---------------
+Best practices and tips
+-----------------------
 
 Reuse buffers passed through a Queue
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -47,8 +47,59 @@ memory copy that can slow down the whole process. Even if you have a pool of
 processes sending data to a single one, make it send the buffers back - this
 is nearly free and will let you avoid a copy when sending next batch.
 
+Asynchronous multiprocess training (e.g. Hogwild)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Using :mod:`torch.multiprocessing`, it is possible to train a model
+asynchronously, with parameters either shared all the time, or being
+periodically synchronized. In the first case, we recommend sending over the whole
+model object, while in the latter, we advise to only send the
+:meth:`~torch.nn.Module.state_dict`.
 
+We recommend using :class:`python:multiprocessing.Queue` for passing all kinds
+of PyTorch objects between processes. It is possible to e.g. inherit the tensors
+and storages already in shared memory, when using the ``fork`` start method,
+however it is very bug prone and should be used with care, and only by advanced
+users. Queues, even though they're sometimes a less elegant solution, will work
+properly in all cases.
 
+.. warning::
 
+    You should be careful about having global statements, that are not guarded
+    with an ``if __name__ == '__main__'``. If a different start method than
+    ``fork`` is used, they will be executed in all subprocesses.
 
+Hogwild
+~~~~~~~
+
+Below you can find a minimal code example, showing how to train a model using
+Hogwild::
+
+    import torch.multiprocessing as mp
+    from model import MyModel
+
+    def train(queue):
+        model = queue.get()
+        # This for loop will break sharing of gradient buffers. It's not
+        # necessary but it reduces the contention, and has a small memory cost
+        # (equal to the total size of parameters).
+        for param in model.parameters():
+            param.grad.data = param.grad.data.clone()
+        # Construct data_loader, optimizer, etc.
+        for data, labels in data_loader:
+            optimizer.zero_grad()
+            loss_fn(model(data), labels).backward()
+            optimizer.step()  # This will update the shared parameters
+
+    if __name__ == '__main__':
+        num_processes = 4
+        model = MyModel()
+        queue = mp.Queue()
+        processes = []
+        for rank in range(num_processes):
+            p = mp.Process(target=train, args=(queue,))
+            p.start()
+            processes.append(p)
+            queue.put(model)
+        for p in processes:
+          p.join()
