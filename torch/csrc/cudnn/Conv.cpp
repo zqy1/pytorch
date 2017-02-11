@@ -28,6 +28,22 @@ void setTensorDescriptor(TensorDescriptor& desc, cudnnDataType_t dataType, THVoi
   desc.set(dataType, tensor->nDimension, inputSize, inputStride);
 }
 
+void setInput(TensorDescriptor& desc, cudnnDataType_t dataType, THVoidTensor* tensor, int groups)
+{
+  CHECK_ARG(tensor->nDimension <= 5);
+  int inputSize[5];
+  int inputStride[5];
+  fprintf(stderr, "input desc:");
+  for (int i = 0; i < tensor->nDimension; ++i) {
+    inputSize[i] = (int) tensor->size[i];
+    inputStride[i] = (int) tensor->stride[i];
+  fprintf(stderr, " (%d, %d)", inputSize[i], inputStride[i]);
+  }
+  fprintf(stderr, "\n");
+  inputSize[1] /= groups;
+  desc.set(dataType, tensor->nDimension, inputSize, inputStride);
+}
+
 void setWeightDescriptor(FilterDescriptor& desc, cudnnDataType_t dataType, THVoidTensor* weight, int groups)
 {
   CHECK_ARG(weight->nDimension <= 5);
@@ -270,7 +286,7 @@ Convolution::Convolution(
     params.dilation[i] = dilation[i];
   }
   params.groups = groups;
-  setTensorDescriptor(idesc, dataType, input, groups);
+  setInput(idesc, dataType, input, groups);
   setTensorDescriptor(odesc, dataType, output, groups);
   if (!transposed)
     setTensorDescriptor(odesc_bias, dataType, output, 1);
