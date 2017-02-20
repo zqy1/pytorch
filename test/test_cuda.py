@@ -206,7 +206,7 @@ tests = [
     ('norm', small_3d, lambda t: [3, 0], '3_norm_dim'),
     ('ones', small_3d, lambda t: [1, 2, 3, 4, 5],),
     ('permute', new_t(1, 2, 3, 4), lambda t: [2, 1, 3, 0],),
-    ('prod', small_3d, lambda t: [],),
+    ('prod', lambda t: make_tensor(t, S, S).mul(2).clamp(min=0.99, max=1.01), lambda t: [],),
     ('prod', small_3d, lambda t: [1], 'dim'),
     ('sum', small_2d, lambda t: [],),
     ('sum', small_3d, lambda t: [1], 'dim'),
